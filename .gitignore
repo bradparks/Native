@@ -43,5 +43,11 @@ Thumbs.db
 *.xml
 
 bin/hx/obj/darwin/all_objs
-
+bin
 bin/hx/Main
+bin-llvm
+hello
+
+hello.bc
+
+hello.s
