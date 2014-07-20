@@ -19,3 +19,29 @@
 *.exe
 *.out
 *.app
+
+# Mac & Win
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*Thumbs.db
+
+# etc
+*.html
+*.h
+
+*.cpp
+
+*.txt
+
+*.gch
+
+*.xml
+
+bin/hx/obj/darwin/all_objs
+
+bin/hx/Main
