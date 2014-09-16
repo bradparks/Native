@@ -42,6 +42,10 @@ define double @bar(){
   ret double 0.1
 }
 
+define %Int @intf(){
+  ret %Int 5
+}
+
 define double @baz(double %x) {
 entry:
   %ifcond = fcmp one double %x, 0.000000e+00
@@ -60,17 +64,24 @@ ifcont:     ; preds = %else, %then
   ret double %iftmp
 }
 
+define i8 @intf8(){
+  ret i8 5
+}
+
 define i32 @main(...) {
-  double @bar(){
-    ret double 0.1
-  }
+  ;define double %bar(){
+  ;  ret double 0.1
+  ;}
   ;global_str_ptr = getelementptr [13 x i8]*  @global_str, i64 0, i64 0
   %temp = getelementptr [13 x i8]*  @global_str, i64 0, i64 0
   call i32 @puts(i8* %temp)
+  call i32 @puts(i8* getelementptr([13 x i8]* @global_str, i32 0, i32 0))
+  ;call i32 @puts(i8* call i8 @intf8())
   ;%n = i32 5
   %n = alloca %Int
   store %Int 0, %Int* %n
-  ;%sum = add i32 %n, 5
+  %r = call %Int @intf()
+  ;%sum = add i32* %n, 5
   ;call i32 @puts(i8* @0)
   call double @baz(double 8.0)
   ret i32 0
