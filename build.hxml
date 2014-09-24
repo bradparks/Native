@@ -7,16 +7,18 @@
 -js bin-llvm/Main.ll
 -D llvm
 --macro llvmaxe.IRGenerator.use()
+#-dce full
 -dce std
---connect 6000
+#--connect 6000
 
 # clang
 -cmd echo "clang ->"
--cmd clang -S -emit-llvm -o foo.ll -c foo.c -fobjc-arc
+-cmd clang -S -Wattributes -fno-unroll-loops -emit-llvm -o foo.ll -c foo.c 
+#-fobjc-arc
 -cmd /Volumes/10.10/clang+llvm-3.4.2-x86_64-apple-darwin10.9/bin/llvm-as foo.ll
 -cmd /Volumes/10.10/clang+llvm-3.4.2-x86_64-apple-darwin10.9/bin/llc foo.bc -march x86-64
 -cmd gcc -o foo foo.s
--cmd ./foo
+#-cmd ./foo
 # clean
 -cmd rm -f foo.bc
 -cmd rm -f foo.s

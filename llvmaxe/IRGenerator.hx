@@ -32,6 +32,11 @@ import haxe.macro.TypedExprTools;
 using Lambda;
 using StringTools;
 
+typedef FieldInitialiser = {
+    expr : haxe.macro.TypedExpr,
+    id : String
+}
+
 class IRGenerator
 {
     static var imports = [];
@@ -42,6 +47,8 @@ class IRGenerator
     var storeBuf : StringBuf;
     var packages : haxe.ds.StringMap<Bool>;
     var forbidden : haxe.ds.StringMap<Bool>;
+
+    static var staticFieldInitialisers:Array<FieldInitialiser> = []; 
 
     public function new(api)
     {
@@ -74,7 +81,7 @@ class IRGenerator
         while(x-- > 0)	print("\t");
     }
 
-    inline function genExpr(e)
+    inline function genExpr(e:haxe.macro.TypedExpr)
     {
         var expr:haxe.macro.TypedExpr = e;
         var exprString = new IRPrinter().printExpr(expr);
@@ -131,7 +138,7 @@ class IRGenerator
     function checkFieldName(c : ClassType, f : ClassField)
     {
         if(forbidden.exists(f.name))
-            Context.error("The field " + f.name + " is not allowed in Lua", c.pos);
+            Context.error("The field " + f.name + " is not allowed in LLVM", c.pos);
     }
 
     function genClassField(c : ClassType, p : String, f : ClassField)
@@ -159,6 +166,39 @@ class IRGenerator
         newline();
     }
 
+    function getStaticTypeDef(e:haxe.macro.Type):{t:String,i:String}
+    {
+        var inited = "";
+        var typed =
+        switch (e) {
+            case TAbstract(t,[]): 
+                switch (t.toString()) {
+                    case "Int": inited = " 0"; "%Int";
+                    case "Float": inited = " 0.0"; "%Float";
+                    case "Bool": inited = " 255"; "%Bool";
+                    default: "TAbstract(t,[])>>" + t.toString();
+                }
+            case TInst(t,[]):
+            switch (t.toString()) {
+                    case "String": inited = " null"; "%PString";
+                    default: "TInst(t,[])>>" + t.toString();
+                }
+            case TInst(t,a) if(a.length == 1): // TODO: multiple params case
+            switch (t.toString()) {
+                    case "Array":
+                    var type = getStaticTypeDef(a[0]);
+                    // { [0 x type]*, i32 Len, i32 ARC }
+                    inited = " null";
+                    //'{ [0 x ${type.t}]* null, i32 0, i32 1 }';
+                    '{ [0 x ${type.t}]*, i32, i32 }*';
+                    default: "TInst(t,a)>>" + t.toString();
+                }
+
+            case _: "Type>" + e;
+        }
+        return { t: typed, i: inited };
+    }
+
     function genStaticField(c : ClassType, p : String, f : ClassField)
     {
         var classes = classCount > 1;
@@ -184,7 +224,10 @@ class IRGenerator
         var e = f.expr();
         if(e == null)
         {
-            print('$stat var $field;'); //TODO(av) initialisation of static vars if needed
+            print('@${p}.$field = global '); //TODO(av) initialisation of static vars if needed
+            var t = getStaticTypeDef(f.type);
+            print(t.t+t.i);
+            print(";");
             newline();
         }
         else switch( f.kind ) {
@@ -198,8 +241,23 @@ class IRGenerator
                 genExpr(e);
                 newline();
             default:
-                print('${p}.$field = ');
-                genExpr(e);
+                print('@${p}.$field = ');
+
+                switch (e.expr) {
+                    case TConst(c): print(IRPrinter.printStaticConstant(c));
+                    case _: 
+                    staticFieldInitialisers.push({
+                        id : '@${p}.$field',
+                        expr : e
+                    });
+                    print("global ");
+                    var t = getStaticTypeDef(f.type);
+                    print(t.t+t.i);
+                    print("; initialised with ");
+                    genExpr(e);
+                }
+
+                
                 print(";");
                 newline();
 //                statics.add( { c : c, f : f } );
@@ -284,7 +342,6 @@ class IRGenerator
                 print(' -- implements $inter');
             }
 
-    //        var name = p.split(".").map(api.quoteString).join(",");
             openBlock();
         }
 
@@ -348,14 +405,6 @@ class IRGenerator
             }
             newline();
         }
-//        var meta = api.buildMetaData(e);
-//        if(meta != null)
-//        {
-//            print('$p.__meta__ = ');
-//            genExpr(meta);
-//            newline();
-//        }
-
         print("} --<-- huh?");
         newline();
     }
@@ -422,58 +471,11 @@ class IRGenerator
         for(mpt in imports)
             importsBuf.add("import '" + mpt + "';\n");
 
-        //genExpr(api.main);
-
         var boot = "";
         var path = ".";
         boot = "" + sys.io.File.getContent('$path/llvmaxe/boot/boot.ll');
-        //boot = "" + sys.io.File.getContent('$path/boot/boot.lua');
-        //boot += "\n" + sys.io.File.getContent('$path/boot/tostring.lua');
-        //boot += "\n" + sys.io.File.getContent('$path/boot/std.lua');
-        //boot += "\n" + sys.io.File.getContent('$path/boot/string.lua');
-        //boot += "\n" + sys.io.File.getContent('$path/boot/object.lua');
-        //boot += "\n" + sys.io.File.getContent('$path/boot/array.lua');
-        //boot += "\n" + sys.io.File.getContent('$path/boot/map.lua');
 
         var combined = importsBuf.toString() + topLevelBuf.toString() +  buf.toString();
-
-        var r;
-        r = ~/(Array<[A-z]{0,}>).new()/g;
-        //combined = r.replace(combined,"{}; -- $1");
-        combined = r.replace(combined,"Array(); -- $1");
-
-        r = ~/(haxe_ds_IntMap<[A-z]{0,}>).new()/g;
-        //combined = r.replace(combined,"{}; -- $1");
-        combined = r.replace(combined,"Map(); -- $1");
-
-        combined = combined.replace(";  ;","; ")
-        .replace(")then return; \n",")then return; end\n");
-
-        r = ~/\t\t([A-z]{0,}) ([+,-])= /g;
-        combined = r.replace(combined,"\t\t$1 = $1 $2 ");
-        //.replace(" = (  ) \n", " = function (  ) \n");
-
-        r = ~/ = \( ([A-z,0-9]{0,}) \) \n/g;
-        combined = r.replace(combined," = function ( $1 ) \n");
-        
-        // ultra fast to-localvar increments
-        r = ~/\tlocal ([A-z,0-9]{0,}) = \(function \(\) local _r = ([A-z,0-9]{0,}) or 0; [A-z,0-9]{0,} = _r ([+-]) 1; return _r end\)\(\);\n/g;
-        combined = r.replace(combined,"\tlocal $1 = $2; $2 = $2 $3 1\n");
-        
-        // ultra fast increments fix
-        r = ~/\t\(function \(\) local _r = ([A-z,0-9]{0,}) or 0; [A-z,0-9]{0,} = _r ([+-]) 1; return _r end\)\(\);\n/g;
-        combined = r.replace(combined,"\t$1 = $1 $2 1\n");
-        
-        r = ~/\t\(function \(\) ([A-z,0-9]{0,}) = \([A-z,0-9]{0,} or 0\) ([+-]) 1; return [A-z,0-9]{0,}; end\)\(\);\n/g;
-        //combined = r.replace(combined,"\t$1 = ($1 or 0) $2 1\n");
-        // TODO in haXe: always initiated?
-        combined = r.replace(combined,"\t$1 = $1 $2 1\n");
-
-        // ultra fast array push
-        r = ~/\t([A-z,0-9]{0,}):push\(([A-z,0-9,"']{0,})\);\n/g;
-        combined = r.replace(combined,"\ttable.insert($1, $2)\n");
-
-        
 
         // strings
         // TODO utf8/16
@@ -505,13 +507,8 @@ class IRGenerator
 
         sys.io.File.saveContent(api.outputFile, 
         	boot + strs + "\n\n" +
-        	//"function exec()\n" +
         	combined +
         	smain
-        	//"\nend\n" +
-        	//boot + 
-        	//"\nexec()" +
-        	//"\nMain_Main.main()"
         	);
     }
 
@@ -520,8 +517,8 @@ class IRGenerator
     function openBlock()
     {
         newline();
-        //print("do --{");
-        //indentCount ++;
+        print(";do");
+        indentCount ++;
         newline();
     }
 
@@ -529,8 +526,8 @@ class IRGenerator
     {
         indentCount --;
         newline();
-        //print("end --}");
-        //newline();
+        print(";end");
+        newline();
         newline();
     }
 

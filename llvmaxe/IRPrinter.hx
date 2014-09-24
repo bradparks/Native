@@ -46,830 +46,529 @@ using StringTools;
 
 class IRPrinter {
 
-    public static var insideConstructor:String = null;
-    public static var superClass:String = null;
+	public static var insideConstructor:String = null;
+	public static var superClass:String = null;
 
-    public static var strings:Array<String> = [];
-    public static var stringslen:Map<String,Int> = new Map();
+	public static var strings:Array<String> = [];
+	public static var stringslen:Map<String,Int> = new Map();
 
-    var tabs:String;
-    var tabString:String;
-    var bit:String = "64";
+	var tabs:String;
+	var tabString:String;
+	var bit:String = "64";
 
-    public static var currentPath = "";
-    public static var lastConstIsString = false;
+	public static var currentPath = "";
+	public static var lastConstIsString = false;
 
-    static var keywords = [];
-    var kw = [ "abstract", "as", "assert", "break", "case", "catch", "class", "const",
-                            "continue", "default", "do", "dynamic", "else", "export", "external", "extends",
-                            "factory", "false", "final", "finally", "for", "get", "if", "implements",
-                            "import" , "in", "is", "library", "new", "null", "operator", "part",
-                            "return", "set", "static", "super", "switch", "this", "throw", "true",
-                            "try", "typedef", "var", "void", "while", "with" ];
+	static var keywords = [];
+	var kw = [ "abstract", "as", "assert", "break", "case", "catch", "class", "const",
+							"continue", "default", "do", "dynamic", "else", "export", "external", "extends",
+							"factory", "false", "final", "finally", "for", "get", "if", "implements",
+							"import" , "in", "is", "library", "new", "null", "operator", "part",
+							"return", "set", "static", "super", "switch", "this", "throw", "true",
+							"try", "typedef", "var", "void", "while", "with" ];
 
-    static var standardTypes:Map<String, String> = [
-        "Array" => "List",
-        "Int" => "int",
-        "Float" => "double",
-    ];
+	static var standardTypes:Map<String, String> = [
+		"Array" => "List",
+		"Int" => "int",
+		"Float" => "double",
+	];
 
-    public static var pathHack = new StringMap();
+	public static var pathHack = new StringMap();
 
-    public static function mapStandardTypes(typeName)
+	public static function mapStandardTypes(typeName)
+	{
+		var mappedType = standardTypes.get(typeName);
+		return mappedType == null ? typeName : mappedType;
+	}
+
+	public static function handleKeywords(name)
+	{
+		if(keywords.indexOf(name) != -1)
+			return "_" + name;
+		return name;
+	}
+
+	public function new(?tabString = "\t") {
+		tabs = "\t";
+		this.tabString = tabString;
+	}
+
+	public function printUnop(op:Unop, val:String = null, inFront:Bool = false)
+	if(val == null)
+	return switch(op) {
+		case OpIncrement: "++";
+		case OpDecrement: "--";
+		case OpNot: "!";
+		case OpNeg: "-";
+		case OpNegBits: "~";
+	}else
+	return switch(op) {
+		case OpIncrement: inFront? 
+		'(function () local _r = $val or 0; $val = _r + 1; return _r end)()'
+		: '(function () $val = ($val or 0) + 1; return $val; end)()';
+		case OpDecrement: inFront? 
+		'(function () local _r = $val or 0; $val = _r - 1; return _r end)()'
+		: '(function () $val = ($val or 0) - 1; return $val; end)()';
+		case OpNot:       inFront? '$val!' : 'not $val';
+		case OpNeg:       inFront? '$val-' : '-$val';
+		case OpNegBits:   inFront? '$val~' : '~$val';
+	}
+
+	public function printBinop(op:Binop)
+	return switch(op) {
+		case OpAdd: "+";
+		case OpMult: "*";
+		case OpDiv: "/";
+		case OpSub: "-";
+		case OpAssign: "=";
+		case OpEq: "==";
+		case OpNotEq: "~=";// "!="
+		case OpGt: ">";
+		case OpGte: ">=";
+		case OpLt: "<";
+		case OpLte: "<=";
+		case OpAnd: "&";
+		case OpOr: "or";//TODO "|";
+		case OpXor: "^";
+		case OpBoolAnd: " and ";// "&&"
+		case OpBoolOr: " or ";// "||"
+		case OpShl: "<<";
+		case OpShr: ">>";
+		case OpUShr: ">>>";
+		case OpMod: "%";
+		case OpInterval: "...";
+		case OpArrow: "=>";
+		case OpAssignOp(op):
+			printBinop(op)
+			+ "=";
+	}
+
+	public static function printString(s:String) {
+		if(strings.indexOf(s) == -1) strings.push(s);
+		lastConstIsString = true;
+		var n = '@global_str_${strings.length-1}';
+			stringslen[n] = s.length + 1;
+		return n;
+		return '"' + s.split("\n").join("\\n").split("\t").join("\\t").split("'").join("\\'").split('"').join("\\\"") #if sys .split("\x00").join("\\x00") #end + '"';
+	}
+
+	public static function printConstant(c){
+		lastConstIsString = false;
+		return switch(c) {
+			case TString(s): printString(s);
+			case TThis: "self";
+			case TNull: "nil";
+			case TBool(true): "true";
+			case TBool(false): "false";
+			case TInt(s): ""+s;
+			case TFloat(s): s;
+			case TSuper: "super";
+		}
+	}
+
+	public static function printStaticConstant(c){
+		lastConstIsString = false;
+		return switch(c) {
+			case TString(s): printString(s);
+			case TThis: "self";
+			case TNull: "nil";
+			case TBool(true): "true";
+			case TBool(false): "false";
+			case TInt(s): "global %Int "+s;
+			case TFloat(s): s;
+			case TSuper: "super";
+		}
+	}
+
+	public function printMetadata(meta) return "";
+
+	public function printAccess(access:Access) return switch(access) {
+		case AStatic: "static";
+		case APublic: "public";
+		case APrivate: "private";
+		case AOverride: "override";
+		case AInline: "inline";
+		case ADynamic: "dynamic";
+		case AMacro: "macro";
+	}
+
+	function getArgTypeDef(e:haxe.macro.Type):{t:String,i:String}
     {
-        var mappedType = standardTypes.get(typeName);
-        return mappedType == null ? typeName : mappedType;
-    }
-
-    public static function handleKeywords(name)
-    {
-        if(keywords.indexOf(name) != -1)
-            return "_" + name;
-        return name;
-    }
-
-    public function new(?tabString = "\t") {
-        tabs = "\t";
-        this.tabString = tabString;
-    }
-
-    public function printUnop(op:Unop, val:String = null, inFront:Bool = false)
-    if(val == null)
-    return switch(op) {
-        case OpIncrement: "++";
-        case OpDecrement: "--";
-        case OpNot: "!";
-        case OpNeg: "-";
-        case OpNegBits: "~";
-    }else
-    return switch(op) {
-        case OpIncrement: inFront? 
-        '(function () local _r = $val or 0; $val = _r + 1; return _r end)()'
-        : '(function () $val = ($val or 0) + 1; return $val; end)()';
-        case OpDecrement: inFront? 
-        '(function () local _r = $val or 0; $val = _r - 1; return _r end)()'
-        : '(function () $val = ($val or 0) - 1; return $val; end)()';
-        case OpNot:       inFront? '$val!' : 'not $val';
-        case OpNeg:       inFront? '$val-' : '-$val';
-        case OpNegBits:   inFront? '$val~' : '~$val';
-    }
-
-    public function printBinop(op:Binop)
-    return switch(op) {
-        case OpAdd: "+";
-        case OpMult: "*";
-        case OpDiv: "/";
-        case OpSub: "-";
-        case OpAssign: "=";
-        case OpEq: "==";
-        case OpNotEq: "~=";// "!=" in Lua
-        case OpGt: ">";
-        case OpGte: ">=";
-        case OpLt: "<";
-        case OpLte: "<=";
-        case OpAnd: "&";
-        case OpOr: "or";//TODO "|";
-        case OpXor: "^";
-        case OpBoolAnd: " and ";// "&&" in Lua
-        case OpBoolOr: " or ";// "||" in Lua
-        case OpShl: "<<";
-        case OpShr: ">>";
-        case OpUShr: ">>>";
-        case OpMod: "%";
-        case OpInterval: "...";
-        case OpArrow: "=>";
-        case OpAssignOp(op):
-            printBinop(op)
-            + "=";
-    }
-
-    public function printString(s:String) {
-        if(strings.indexOf(s) == -1) strings.push(s);
-        lastConstIsString = true;
-        var n = '@global_str_${strings.length-1}';
-            stringslen[n] = s.length + 1;
-        return n;
-        return '"' + s.split("\n").join("\\n").split("\t").join("\\t").split("'").join("\\'").split('"').join("\\\"") #if sys .split("\x00").join("\\x00") #end + '"';
-    }
-
-    public function printConstant(c){
-        lastConstIsString = false;
-        return switch(c) {
-            case TString(s): printString(s);
-            //case CIdent(s),CInt(s), CFloat(s): s;
-            //case CRegexp(s,opt): '~/$s/$opt'; TODO
-            case TThis: "self";
-            case TNull: "nil";
-            case TBool(true): "true";
-            case TBool(false): "false";
-            case TInt(s): ""+s;
-            case TFloat(s): s;
-            case TSuper: "super";
-        }
-    }
-
-    /*public function printTypeParam(param:TypeParam) return switch(param) {
-        case TPType(ct): printComplexType(ct);
-        case TPExpr(e): printExpr(e);
-    }/**/
-
-/*  public function printTypePath(tp:TypePath){
-        if(tp.sub != null) return tp.sub ;
-        return
-        (tp.pack.length > 0 ? tp.pack.join("_") + "_" : "")
-        + tp.name
-        + (tp.sub != null ? '.${tp.sub}' : "")
-        + (tp.params.length > 0 ? "<" + tp.params.map(printTypeParam).join(", ") + ">" : "");
-    }/**/
-
-/*  // TODO: check if this can cause loops
-    public function printComplexType(ct:ComplexType) return switch(ct) {
-        case TPath(tp): printTypePath(tp);
-        case TFunction(args, ret): (args.length>0 ? args.map(printComplexType).join(" -> ") : "Void") + " -> " + printComplexType(ret);
-        case TAnonymous(fields): "{ " + [for (f in fields) printField(f) + "; "].join("") + "}";
-        case TParent(ct): "(" + printComplexType(ct) + ")";
-        case TOptional(ct): "?" + printComplexType(ct);
-        case TExtend(tp, fields): "";
-        // '{' +
-        // printTypePath(tp) + ' >,' + 
-        // ' ${fields.map(printField).join(", ")} }';
-    }/**/
-
-    public function printMetadata(meta) return "";
-    /*  '@${meta.name}'
-        + (meta.params.length > 0 ? '(${printExprs(meta.params,", ")})' : "");/**/
-
-    public function printAccess(access:Access) return switch(access) {
-        case AStatic: "static";
-        case APublic: "public";
-        case APrivate: "private";
-        case AOverride: "override";
-        case AInline: "inline";
-        case ADynamic: "dynamic";
-        case AMacro: "macro";
-    }
-
-//  public function printField(field:Field) return
-//      (field.doc != null && field.doc != "" ? "/**\n" + tabs + tabString + StringTools.replace(field.doc, "\n", "\n" + tabs + tabString) + "\n" + tabs + "**/\n" + tabs : "")
-//      + (field.meta != null && field.meta.length > 0 ? field.meta.map(printMetadata).join(" ") + " " : "")
-//      + (field.access != null && field.access.length > 0 ? field.access.map(printAccess).join(" ") + " " : "")
-//      + switch(field.kind) {
-//        case FVar(t, eo): 'var ${field.name}' + opt(t, printComplexType, " : ") + opt(eo, printExpr, " = ");
-//        case FProp(get, set, t, eo): 'var ${field.name}($get, $set)' + opt(t, printComplexType, " : ") + opt(eo, printExpr, " = ");
-//        case FFun(func): 'function ${field.name}' + printFunction(func);
-//      }
-
-//  public function printTypeParamDecl(tpd:TypeParamDecl) return
-//      tpd.name
-//      + (tpd.params != null && tpd.params.length > 0 ? "<" + tpd.params.map(printTypeParamDecl).join(", ") + ">" : "")
-//      + (tpd.constraints != null && tpd.constraints.length > 0 ? ":(" + tpd.constraints.map(printComplexType).join(", ") + ")" : "");
-
-    public function printArgs(args:Array<{value:Null<TConstant>, v:TVar}>)
-    {
-        var argString = null;
-        //var optional = false;
-
-        for(i in 0 ... args.length)
-        {
-            var arg = args[i];
-            //var argValue = printExpr(arg.value);
-//
-            //if((arg.opt || argValue != "#NULL") && !optional)
-            //{
-            //    optional = true;
-            //    argString += "[";
-            //}
-            //argString += arg.name;
-//
-            //if(argValue != null && argValue != "#NULL")
-            //    argString += '= $argValue';
-//
-            //if(i < args.length - 1)
-            //    argString += ",";
-            argString = (argString == null?"":argString+", ") + arg.v.name;
-        }
-
-        //if(optional) argString += "]";
-
-        return (argString == null?"":argString);
-    }/**/
-
-    public static var printFunctionHead = true;
-    public function printFunction(func:TFunc)
-    {
-        var head = printFunctionHead;
-        printFunctionHead = true;
-
-        var body:String = (head?"function ":"") + "( " + printArgs(func.args) + " ) {";
-
-        if(insideConstructor != null)
-        {
-            body +=
-            '\n\t\tlocal self = {}' +
-            '\n\t\tsetmetatable(self, $insideConstructor)';
-        }
-
-        //var t = tabs;
-        //tabs += "\t";
-        var defret = "ret void";
-        
-        switch (func.expr.expr) {
-            case TBlock(el) if (el.length == 0):    body += "\n\t$defret\n}";
-            case _: body += opt(func.expr, printExpr, '\n${tabs}') + '\n\t$defret\n}';
-        }
-
-        //tabs = t;
-
-        return body;
-    }
-
-//        return
-////  UNUSED  (func.params.length > 0 ? "<" + func.params.map(printTypeParamDecl).join(", ") + ">" : "") 
-//        (head?"function ":"") + "( " + printArgs(func.args) + " )"
-//////    DONE    + "( " + func.args.map(printFunctionArg).join(", ") + " )"
-//////    UNUSED  + opt(func.ret, printComplexType, " : ")
-//        + (insideConstructor != null ?
-//            '\n\t\tlocal self = {}' +
-//            '\n\t\tsetmetatable(self, $insideConstructor)'
-//            //'\n\t\tinherit(self, $insideConstructor.new())'
-//        : '') + '\n\t\t'
-//        + opt(func.expr, printExpr, " ") + '\n${tabs}end';
-//    }
-////    public function printVar(v:Var)
-////    {
-////        return
-////        v.name
-////        //        + opt(v.type, printComplexType, " : ")
-////        + opt(v.expr, printExpr, " = ");
-////    }
-//
-    public function printVar(v:TVar, expr:Null<TypedExpr>)
-    {
-        return v.name + opt(expr, printExpr, " = ");
-    }
-//    public function printVar(v:TVar, expr:Null<TypedExpr>,context = "null")
-//    {
-//        function def () {
-//            return
-//            handleKeywords(v.name)
-//            //      + opt(v.type, printComplexType, " : ")
-//            + if (expr != null) opt(expr, printOpAssignRight.bind(_,context), " = ") else " = nil";
-//        }
-//
-//        return if (expr != null) {
-//            if (expr.expr != null)
-//            {
-//                switch (expr.expr) {
-//                    case TFunction(f):
-//                        printFunction(f /*,context,v.name*/);
-//                    case _ : def();
-//                }
-//            } else {
-//                def();
-//            }
-//        } else {
-//
-//            def();
-//        }
-//    }
-
-//    function justPath(expr)
-//    {
-//        return switch(expr.expr)
-//        {
-//            case EConst(CIdent(s)):s;
-//            case EField(e, field): justPath(e) + "_" + field;
-//            default:"";
-//        }
-//       // return printExpr(expr);
-//    }
-
-    function printField(e1:TypedExpr, fa:FieldAccess, /*context:PrintContext,*/ isAssign:Bool = false)
-    {
-        var obj = switch (e1.expr) {
-            case TConst(TSuper): "super()";
-            case _: '${printExpr(e1)}';
-        }
-
-        var name = switch (fa) {
-            case FInstance(_, cf): "." + cf.get().name;
-            case FStatic(_,cf): "." + cf.get().name;
-            case FAnon(cf): "." + cf.get().name;
-            case FDynamic(s): "." + s;
-            case FClosure(_,cf): "." + cf.get().name;
-            case FEnum(_,ef): "." + ef.name;
-            case _: "/printField/" + e1 + " " + fa;
-        }
-
-        return obj + name;
-/*
-        function doDefault() {
-            return '$obj.${handleKeywords(name)}';
-        }
-
-        return switch (fa) {
-            case FInstance(isType("", "list") => true, cf) if (cf.get().name == "length" || cf.get().name == "get_length"):
-                "_hx_builtin.len(" + printExpr(e1, context) + ")";
-            case FInstance(x = isType("", "String") => true, cf) if (cf.get().name == "toUpperCase"):
-                printExpr(e1, context) + ".toupper";
-            case FInstance(isType("", "String") => true, cf) if (cf.get().name == "toLowerCase"):
-                printExpr(e1, context) + ".tolower";
-            
-
-            case FInstance(ct, cf): 
-                //var ct = ct.get();
-                doDefault();
-            case FStatic(x,cf): 
-            
-                doDefault();
-            case FAnon(cf) if (name == "iterator" && !isAssign):
-                switch (cf.get().type) {
-                    case TFun(args,_) if (args.length == 0): 
-                        '_hx_functools.partial(HxOverrides_iterator, $obj)';        
-                    case _ : doDefault();
+        var inited = "";
+        var typed =
+        switch (e) {
+            case TAbstract(t,[]): 
+                switch (t.toString()) {
+                    case "Int": inited = " 0"; "%Int";
+                    case "Float": inited = " 0.0"; "%Float";
+                    case "Bool": inited = " 255"; "%Bool";
+                    default: "TAbstract(t,[])>>" + t.toString();
                 }
-            case FAnon(cf) if (name == "shift" && !isAssign):
-                switch (cf.get().type) {
-                    case TFun(args,_) if (args.length == 0): 
-                        '_hx_functools.partial(HxOverrides_shift, $obj)';        
-                    case _ : doDefault();
+            case TInst(t,[]):
+            switch (t.toString()) {
+                    case "String": inited = " null"; "%PString";
+                    default: "TInst(t,[])>>" + t.toString();
                 }
-            case FAnon(_):
-                doDefault();
-            case FDynamic("iterator"):
-                '_hx_functools.partial(HxOverrides_iterator, $obj)';
-            case FDynamic("length") if (!isAssign):
-                'HxOverrides_length($obj)';
-            case FDynamic("filter") if (!isAssign):
-                '_hx_functools.partial(HxOverrides_filter, $obj)';
-            case FDynamic("map") if (!isAssign):
-                '_hx_functools.partial(HxOverrides_map, $obj)';
-            case FDynamic(_):
-                doDefault();
-            case FClosure(ct,cf): 
-                doDefault();
-            case FEnum(_,ef): 
-                doDefault();
-        }
-        /**/
-    }
-
-    function printCall(e1:TypedExpr, el:Array<TypedExpr>, _static = false)
-    {
-        var id = printExpr(e1);
-
-        if(id.indexOf(currentPath) == 0)
-            id = id.substr(currentPath.length);
-
-        var result =  switch(id)
-        {
-            case "trace" :
-                formatPrintCall(el);
-            case "__lua__":
-                extractString(el[0]);
-            case "__call__":
-                '${printExpr(el.shift())}(${printExprs(el,", ")})';
-            case "__assert__":
-                'assert(${printExprs(el,", ")})';
-            case "__new_named__":
-                'new ${extractString(el.shift())}(${printExprs(el,", ")})';
-            case "__call_named__":
-                '${extractString(el.shift())}(${printExprs(el,", ")})';
-            case "__is__":
-                '(${printExpr(el[0])} is ${printExpr(el[1])})';
-            case "__as__":
-                '(${printExpr(el[0])} as ${printExpr(el[1])})';
-            case "__call_after__":
-                var methodName = extractString(el.shift());
-                '(${printExpr(el[0])}).$methodName()';
-            case "__cascade__":
-                 '${printExpr(el.shift())}..${printExprs(el, ",")}';
-            default:
-               //'$id(${printExprs(el,", ")})'; // <-- here to . :
-
-            (function(){
-
-                switch (e1.expr) {
-                    case TField(e, field):
-                        switch (e.expr) {
-                            case TField(e, field):
-                            {
-                                //trace(e1.expr);
-
-                                return '$id(${printExprs(el,", ")})'
-                                .replace(".set(", ":set(")
-                                .replace(".get(", ":get(")
-                                .replace(".iterator(", ":iterator(");
-                            };
-                            /*case EConst(c):
-                            {
-                                trace("const!");
-                                trace(c);
-                                trace(id);
-                                trace('$id(${printExprs(el,", ")})');
-                            };*/
-                            default:{};
-                        }
-                    default:{};
+            case TInst(t,a) if(a.length == 1): // TODO: multiple params case
+            switch (t.toString()) {
+                    case "Array":
+                    var type = getArgTypeDef(a[0]);
+                    // { [0 x type]*, i32 Len, i32 ARC }
+                    inited = " null";
+                    //'{ [0 x ${type.t}]* null, i32 0, i32 1 }';
+                    '{ [0 x ${type.t}]*, i32, i32 }*';
+                    default: "TInst(t,a)>>" + t.toString();
                 }
-                //trace(id);
-                var r = '${_static?id : id.replace(".",":")}(${printExprs(el,", ")})';
-                //return r.indexOf('.new(') == -1? r.replace(".",":") : r;
-                //if() r = r.replace(".",":")
-                return r
-                    .replace(":new(", ".new(")
-                    ;
-            })();
+
+            case _: "Type>" + e;
         }
-
-        if(result == "super()")
-            result = '\t\t__inherit(self, $superClass.new())';//"--super()";
-
-        return result;
+        return { t: typed, i: inited };
     }
 
-    function extractString(e:haxe.macro.TypedExpr)
-    {
-        return switch(e.expr)
-        {
-            case TConst(TString(s)):s;
-            default:"####";
-        }
-    }
+	public function printArgs(args:Array<{value:Null<TConstant>, v:TVar}>)
+	{
+		var argString = null;
 
-    function formatPrintCall(el:Array<TypedExpr>)
-    {
-        var expr = el[0];
-        var posInfo = Std.string(expr.pos);
-        posInfo = posInfo.substring(5, posInfo.indexOf(" "));
+		for(i in 0 ... args.length)
+		{
+			var arg = args[i];
+			argString = (argString == null?"":argString+", ") + getArgTypeDef(arg.v.t).t + " %" + arg.v.name;
+		}
 
-        var traceString = printExpr(expr);
+		return (argString == null?"":argString);
+	}
 
-        var toStringCall = switch(expr.expr)
-        {
-            case TConst(TString(_)):"";
-            default:".toString()";
-        }
+	public static var printFunctionHead = true;
+	public function printFunction(func:TFunc)
+	{
+		var head = printFunctionHead;
+		printFunctionHead = true;
 
-        var traceStringParts = traceString.split(" + ");
-        var toString = ".toString()";
+		var body:String = (head?"function ":"") + "( " + printArgs(func.args) + " ) {";
 
-        for(i in 0 ... traceStringParts.length)
-        {
-            var part = traceStringParts[i];
+		if(insideConstructor != null)
+		{
+			body +=
+			'\n\t\tlocal self = {}' +
+			'\n\t\tsetmetatable(self, $insideConstructor)';
+		}
 
-            if(part.lastIndexOf('"') != part.length - 1 && part.lastIndexOf(toString) != part.length-toString.length)
-            {
-                traceStringParts[i] += "";//".toString()";
-            }
-        }
+		var defret = "ret void";
+		
+		switch (func.expr.expr) {
+			case TBlock(el) if (el.length == 0):    body += '\n\t$defret\n}';
+			case _: body += opt(func.expr, printExpr, '\n${tabs}') + '\n\t$defret\n}';
+		}
 
-        traceString = traceStringParts.join(" .. "); //(" + ");
+		return body;
+	}
 
-        return
-            '%temp = getelementptr [${stringslen[traceString]} x i8]*  $traceString, i$bit 0, i$bit 0' +
-            '\n\tcall i32 @puts(i8* %temp)';
+	public function printVar(v:TVar, expr:Null<TypedExpr>)
+	{
+		return v.name + opt(expr, printExpr, " = ");
+	}
 
-        return 'print($traceString)';
-    }
+	function printField(e1:TypedExpr, fa:FieldAccess, isAssign:Bool = false)
+	{
+		var obj = switch (e1.expr) {
+			case TConst(TSuper): "super()";
+			case _: '${printExpr(e1)}';
+		}
 
-    function print_field(e1, name)
-    {
-        var expr = '${printExpr(e1)}.$name';
+		var name = switch (fa) {
+			case FInstance(_, cf): "." + cf.get().name;
+			case FStatic(_,cf): "." + cf.get().name;
+			case FAnon(cf): "." + cf.get().name;
+			case FDynamic(s): "." + s;
+			case FClosure(_,cf): "." + cf.get().name;
+			case FEnum(_,ef): "." + ef.name;
+			case _: "/printField/" + e1 + " " + fa;
+		}
 
-        //var toFunc = false;
+		return obj + name;
+	}
 
-        //trace(e1);
+	function printCall(e1:TypedExpr, el:Array<TypedExpr>, _static = false)
+	{
+		var id = printExpr(e1);
 
-        /*switch (e1.expr) {
-            case EConst(c):
-               trace(c); 
-               switch (c) {
-                    case CIdent(s)
-                    default:{};
-               }
-            default:{};
-        }*/
+		if(id.indexOf(currentPath) == 0)
+			id = id.substr(currentPath.length);
 
-        if(pathHack.exists(expr))
-            expr = pathHack.get(expr);
+		switch(id)
+		{
+			case "trace" :
+				return formatPrintCall(el);
+			/*case "__llvm__":
+				extractString(el[0]);
+			case "__call__":
+				'${printExpr(el.shift())}(${printExprs(el,", ")})';
+			case "__assert__":
+				'assert(${printExprs(el,", ")})';
+			case "__new_named__":
+				'new ${extractString(el.shift())}(${printExprs(el,", ")})';
+			case "__call_named__":
+				'${extractString(el.shift())}(${printExprs(el,", ")})';
+			case "__is__":
+				'(${printExpr(el[0])} is ${printExpr(el[1])})';
+			case "__as__":
+				'(${printExpr(el[0])} as ${printExpr(el[1])})';
+			case "__call_after__":
+				var methodName = extractString(el.shift());
+				'(${printExpr(el[0])}).$methodName()';
+			case "__cascade__":
+				 '${printExpr(el.shift())}..${printExprs(el, ",")}';*/
+			default:
 
-        if(expr.indexOf(currentPath) == 0)
-            expr = expr.substr(currentPath.length);
+			return (function(){
 
-        if(expr.startsWith("this."))
-            expr = expr.replace("this.", "self.");
+				switch (e1.expr) {
+					case TField(e, field):
+						switch (e.expr) {
+							case TField(e, field):
+							{
+								return '$id(${printExprs(el,", ")})';
+							};
+							default:{};
+						}
+					default:{};
+				}
+				return '${_static?id : id.replace(".",":")}(${printExprs(el,", ")})';
+			})();
+		}
 
-        return expr;
-    }
+		/*if(result == "super()")
+			result = '\t\t__inherit(self, $superClass.new())';*/
 
-    function printBaseType(tp:BaseType):String
-    {
-        return tp.module + "_" + tp.name;
-    }
+		return "$$$";
+	}
 
-    public function printModuleType (t:ModuleType) 
-    {
-        return switch (t) 
-        {
-            case TClassDecl(ct): printBaseType(ct.get());
-            case TEnumDecl(ct): printBaseType(ct.get());
-            case TTypeDecl(ct): printBaseType(ct.get());
-            case TAbstract(ct): printBaseType(ct.get());
-        }
-    }
+	function extractString(e:haxe.macro.TypedExpr)
+	{
+		return switch(e.expr)
+		{
+			case TConst(TString(s)):s;
+			default:"####";
+		}
+	}
 
-    function printIfElse(econd, eif, eelse)
-    {
-        var ifExpr = printExpr(eif);
-        var lastChar = ifExpr.charAt(ifExpr.length - 1);
-        if(lastChar != ";" && lastChar != "}")
-        {
-            ifExpr += ";";
-        }
-      //  trace(ifExpr);
+	function formatPrintCall(el:Array<TypedExpr>)
+	{
+		var expr = el[0];
+		var posInfo = Std.string(expr.pos);
+		posInfo = posInfo.substring(5, posInfo.indexOf(" "));
 
-       return 'if(${printExpr(econd)})then $ifExpr  ${opt(eelse,printExpr,"else ")}';
-    }
+		var traceString = printExpr(expr);
 
-//    public function enterExpr(e:Expr)
-//    {
-//
-//    }
-    //var insideEObjectDecl = false;
+		var toStringCall = switch(expr.expr)
+		{
+			case TConst(TString(_)):"";
+			default:".toString()";
+		}
 
-    
-//
-    public function printExpr(e:TypedExpr){
-//        trace(e);
-        return e == null ? "#NULL" : switch(e.expr) {
-        
-        case TConst(c): printConstant(c); // ok
+		var traceStringParts = traceString.split(" + ");
+		var toString = ".toString()";
 
-        case TLocal(t): (""+handleKeywords(t.name)).replace("`trace", "trace"); // ok
+		for(i in 0 ... traceStringParts.length)
+		{
+			var part = traceStringParts[i];
 
-        case TArray(e1, e2): '${printExpr(e1)}[${printExpr(e2)}]'; // ok
+			if(part.lastIndexOf('"') != part.length - 1 && part.lastIndexOf(toString) != part.length-toString.length)
+			{
+				traceStringParts[i] += "";
+			}
+		}
 
-        case TField(e1, fa): printField(e1, fa);
+		traceString = traceStringParts.join(" .. ");
 
-        case TParenthesis(e1): '(${printExpr(e1)})';
+		return
+			'%temp = getelementptr [${stringslen[traceString]} x i8]*  $traceString, i$bit 0, i$bit 0' +
+			'\n\tcall i32 @puts(i8* %temp)';
 
-        case TObjectDecl(fl):
-            "setmetatable({ "
-             + fl.map(
-                function(fld) {
-                    //insideEObjectDecl = true;
-                    //$type(fld);
-                    //trace(fld.expr.expr);
-                    var add = "+";
-                    var add = switch (fld.expr.expr) {
-                        case TFunction(//no,
-                         func): add = "function ";
-                        default: "";   
-                    }
-                    return //'{fld.field}'
-                    fld.name +
-                    ' = $add${printExpr(fld.expr)}'; // TODO
-                }
-             ).join(", ")
-             + " },Object)";/**/
+		return 'print($traceString)';
+	}
 
-        case TArrayDecl(el): {
-            var temp = printExprs(el, ", ");
-            'setmetatable({' + (temp.length>0? '[0]=${temp}}, HaxeArrayMeta)' : '}, HaxeArrayMeta)');
-        };
+	function print_field(e1, name)
+	{
+		var expr = '${printExpr(e1)}.$name';
 
-        case TTypeExpr(t): printModuleType(t);
+		if(pathHack.exists(expr))
+			expr = pathHack.get(expr);
 
-        case TCall(e1 = { expr : TField(_,FStatic (_))}, el):
-        // 'statico';
-         printCall(e1, el, true);
-        
-        case TCall(e1, el): printCall(e1, el);
-        
-        //case TNew(tp, params, el): '${printTypePath(tp)}.new(${printExprs(el,", ")})';
-        case TNew(tp, _, el): 
-            //'${printTypePath(tp)}.new(${printExprs(el,", ")})';
-            var id:String = printBaseType(tp.get());
-            //'${id}';
-            '${id}.new(${printExprs(el,", ")})';
+		if(expr.indexOf(currentPath) == 0)
+			expr = expr.substr(currentPath.length);
 
-        //case TBinop(OpAdd, e1, e2) if (e.t.match(TInst("String"))):
-        //    '${printExpr(e1)} .. ${printExpr(e2)}';
+		if(expr.startsWith("this."))
+			expr = expr.replace("this.", "self.");
 
-        case TBinop(OpAdd, e1, e2): // TODO extend not only for constants
-        {
-            var toStringCall = '${printBinop(OpAdd)}';
+		return expr;
+	}
 
-            toStringCall = switch(e1.expr)
-            {
-                case TConst(TString(_)):toStringCall == "+" ? '..': toStringCall;
-                default:toStringCall;
-            }
+	function printBaseType(tp:BaseType):String
+	{
+		return tp.module + "_" + tp.name;
+	}
 
-            toStringCall = switch(e2.expr)
-            {
-                case TConst(TString(_)):toStringCall == "+" ? '..': toStringCall;
-                default:toStringCall;
-            }
+	public function printModuleType (t:ModuleType) 
+	{
+		return switch (t) 
+		{
+			case TClassDecl(ct): printBaseType(ct.get());
+			case TEnumDecl(ct): printBaseType(ct.get());
+			case TTypeDecl(ct): printBaseType(ct.get());
+			case TAbstract(ct): printBaseType(ct.get());
+		}
+	}
 
-            '${printExpr(e1)} $toStringCall ${printExpr(e2)}';
-        };
+	function printIfElse(econd, eif, eelse)
+	{
+		var ifExpr = printExpr(eif);
+		var lastChar = ifExpr.charAt(ifExpr.length - 1);
+		if(lastChar != ";" && lastChar != "}")
+		{
+			ifExpr += ";";
+		}
+	   return 'if(${printExpr(econd)})then $ifExpr  ${opt(eelse,printExpr,"else ")}';
+	}
 
-        /*case TBinop(OpOr, e1, e2): 
-            'OpOr(${printExpr(e1)}, ${printExpr(e2)})';*/
+	public function printExpr(e:TypedExpr){
+		return e == null ? "#NULL" : switch(e.expr) {
+		
+		case TConst(c): printConstant(c); // ok
 
-        case TBinop(op, e1, e2): 
-            '${printExpr(e1)} ${printBinop(op)} ${printExpr(e2)}';
-        
-        case TUnop(op, true, e1): printUnop(op,printExpr(e1),true);//printExpr(e1) + printUnop(op);//, printExpr(e1));
-        case TUnop(op, false, e1): printUnop(op,printExpr(e1),false);//printUnop(op) + printExpr(e1);
-        
-        //case TFunction(no, func) if (no != null): '$no' + printFunction(func);
-        //case TFunction(/*_,*/ func): /*"function " +*/ printFunction(func);
-        case TFunction(func): printFunction(func);
+		case TLocal(t): (""+handleKeywords(t.name)).replace("`trace", "trace"); // ok
 
-        //case TVars(vl): "local " +vl.map(printVar).join(", ");
+		case TArray(e1, e2): '${printExpr(e1)}[${printExpr(e2)}]'; // ok
 
-        case TVar(v,e): "local " + printVar(v, e);
-        
-        case TBlock([]): '\n$tabs end';//'B{\n$tabs}B';
-        case TBlock(el) if (el.length == 1): printShortFunction(printExprs(el, ';\n$tabs'));
-        case TBlock(el):
-            var old = tabs;
-            tabs += tabString;
-            var s = /*'{'*/ '\n$tabs' + printExprs(el, ';\n$tabs');//';\n$tabs');
-            tabs = old;
-            s + '\n${tabs}${insideConstructor!=null?"\treturn self\n\t":""}'/*'}'*/;
-            //insideConstructor = null;
+		case TField(e1, fa): printField(e1, fa);
 
-        //case TFor(e1, e2): 'for ${printExpr(e1)} do\n${tabs} ${printExpr(e2)}\n${tabs}end';//'for(${printExpr(e1)}) ${printExpr(e2)}';
-        //case TIn(e1, e2): 'k,${printExpr(e1)} in ${printExpr(e2)}';//'${printExpr(e1)} in ${printExpr(e2)}';
-        
-        case TIf(econd, eif, eelse): printIfElse(econd, eif, eelse); // 'if(${printExpr(econd)}) ${printExpr(eif)}  ${opt(eelse,printExpr,"else ")}';
-        
-        case TWhile(econd, e1, true): 'while(${printExpr(econd)})do ${printExpr(e1)}end';
-        case TWhile(econd, e1, false): 'do ${printExpr(e1)} while(${printExpr(econd)})';
-        
-        //case TSwitch(e1, cl, edef):  printSwitch(e1, cl, edef);
-        /*case TTry(e1, cl):
-            'try ${printExpr(e1)}'
-            + cl.map(function(c) return ' catch(${c.name} ) ${printExpr(c.expr)}').join("");   //: ${printComplexType(c.type)}/**/
-//      case EReturn(eo): "return " + printExpr(eo);
+		case TParenthesis(e1): '(${printExpr(e1)})';
 
-        case TReturn(eo): "return" + opt(eo, printExpr, " ");
+		case TObjectDecl(fl):
+			"setmetatable({ "
+			 + fl.map(
+				function(fld) {
+					//insideEObjectDecl = true;
+					//$type(fld);
+					//trace(fld.expr.expr);
+					var add = "+";
+					var add = switch (fld.expr.expr) {
+						case TFunction(//no,
+						 func): add = "function ";
+						default: "";   
+					}
+					return //'{fld.field}'
+					fld.name +
+					' = $add${printExpr(fld.expr)}'; // TODO
+				}
+			 ).join(", ")
+			 + " },Object)";/**/
 
-        case TBreak: "break";
-        case TContinue: "continue";
-        
-        case TThrow(e1): "throw " +printExpr(e1);
-        //case TCast(e1, cto) if (cto != null): '${printExpr(e1)} as ${printComplexType(cto)}';
-        
-        case TCast(e1, _): printExpr(e1); // ok
-        
-        case TMeta(meta, e1): printMetadata(meta) + " " +printExpr(e1);
+		case TArrayDecl(el): {
+			var temp = printExprs(el, ", ");
+			'setmetatable({' + (temp.length>0? '[0]=${temp}}, HaxeArrayMeta)' : '}, HaxeArrayMeta)');
+		};
 
-        case _: "\n\t-------"+e;
-    };
-    }
+		case TTypeExpr(t): printModuleType(t);
 
-    function printShortFunction(value:String)
-    {
-        var hasReturn = value.indexOf("return ") == 0;
-        //if(hasReturn) value = value.substr(7);
-        return /*"=> " +*/ value + (hasReturn ? ";" : "");
-    }
+		case TCall(e1 = { expr : TField(_,FStatic (_))}, el):
+		 printCall(e1, el, true);
+		
+		case TCall(e1, el): printCall(e1, el);
+		
+		case TNew(tp, _, el): 
+			var id:String = printBaseType(tp.get());
+			'${id}.new(${printExprs(el,", ")})';
 
-    function printSwitch(e1, cl, edef)
-    {
-//        trace(e1);
-//        trace(cl);
-//        trace(edef);
+		case TBinop(OpAdd, e1, e2): // TODO extend not only for constants
+		{
+			var toStringCall = '${printBinop(OpAdd)}';
 
-        var old = tabs;
-        tabs += tabString;
-        var s = 'switch ${printExpr(e1)} {\n$tabs' +
-                    cl.map(printSwitchCase).join('\n$tabs');
-        if (edef != null)
-            s += '\n${tabs}default: ' + (edef.expr == null ? "" : printExpr(edef) + ";");
+			toStringCall = switch(e1.expr)
+			{
+				case TConst(TString(_)):toStringCall == "+" ? '..': toStringCall;
+				default:toStringCall;
+			}
 
-        tabs = old;
-        s += '\n$tabs}';
+			toStringCall = switch(e2.expr)
+			{
+				case TConst(TString(_)):toStringCall == "+" ? '..': toStringCall;
+				default:toStringCall;
+			}
 
-        return s;
-    }
+			'${printExpr(e1)} $toStringCall ${printExpr(e2)}';
+		};
 
-    function printSwitchCase(c)
-    {
-        return 'case ${printExprs(c.values, ", ")}'
-               + (c.guard != null ? ' if(${printExpr(c.guard)}): ' : ":")
-               + (c.expr != null ? (opt(c.expr, printExpr)) + "; break;" : "");
-    }
+		case TBinop(op, e1, e2): 
+			'${printExpr(e1)} ${printBinop(op)} ${printExpr(e2)}';
+		
+		case TUnop(op, true, e1): printUnop(op,printExpr(e1),true);
+		case TUnop(op, false, e1): printUnop(op,printExpr(e1),false);
+		
+		case TFunction(func): printFunction(func);
 
-    public function printExprs(el:Array<TypedExpr>, sep:String) {
+		case TVar(v,e): "local " + printVar(v, e);
+		
+		case TBlock([]): '\n$tabs end';//'B{\n$tabs}B';
+		case TBlock(el) if (el.length == 1): printShortFunction(printExprs(el, ';\n$tabs'));
+		case TBlock(el):
+			var old = tabs;
+			tabs += tabString;
+			var s = /*'{'*/ '\n$tabs' + printExprs(el, ';\n$tabs');//';\n$tabs');
+			tabs = old;
+			s + '\n${tabs}${insideConstructor!=null?"\treturn self\n\t":""}'/*'}'*/;
 
-//        var id = null;
-//
-//        var sameID = [];
-//
-//        var idGroup = new Map<String, Array<Expr>>();
-//
-//        for(ex in el)
-//        {
-//            switch(ex.expr)
-//            {
-//                case ECall(e1, el):
-//                        switch(e1.expr)
-//                        {
-//                            case EField(e1, n):
-//                                switch(e1.expr)
-//                                {
-//                                    case EConst(CIdent(s)):
-//                                        if(id == s){
-////                                             trace(ex);
-//                                            e1.expr = EConst(CIdent(""));
-//                                            sameID.push(ex);
-//                                        }
-//                                        id = s;
-//                                    default:
-//                                }
-//
-//                            default:
-//                        }
-//                default:
-//            }
-//        }
-//
-//        if(id != null)
-//            trace(sameID.map(printExpr).join("."));
+		case TIf(econd, eif, eelse): printIfElse(econd, eif, eelse); 
+		
+		case TWhile(econd, e1, true): 'while(${printExpr(econd)})do ${printExpr(e1)}end';
+		case TWhile(econd, e1, false): 'do ${printExpr(e1)} while(${printExpr(econd)})';
+		
+		case TReturn(eo): "ret" + opt(eo, printExpr, " ");
 
-        return el.map(printExpr).join(sep);
-    }
+		case TBreak: "break";
+		case TContinue: "continue";
+		
+		case TThrow(e1): "throw " +printExpr(e1);
+		
+		case TCast(e1, _): printExpr(e1); // ok
+		
+		case TMeta(meta, e1): printMetadata(meta) + " " +printExpr(e1);
 
-//  public function printTypeDefinition(t:TypeDefinition, printPackage = true):String {
-//      var old = tabs;
-//      tabs = tabString;
-//
-//      var str = t == null ? "#NULL" :
-//          (printPackage && t.pack.length > 0 && t.pack[0] != "" ? "package " + t.pack.join("_") + ";\n" : "") +
-//          (t.meta != null && t.meta.length > 0 ? t.meta.map(printMetadata).join(" ") + " " : "") + (t.isExtern ? "extern " : "") + switch (t.kind) {
-//              case TDEnum:
-//                  "enum " + t.name + (t.params.length > 0 ? "<" + t.params.map(printTypeParamDecl).join(", ") + ">" : "") + " {\n"
-//                  + [for (field in t.fields)
-//                      tabs + (field.doc != null && field.doc != "" ? "/**\n" + tabs + tabString + StringTools.replace(field.doc, "\n", "\n" + tabs + tabString) + "\n" + tabs + "**/\n" + tabs : "")
-//                      + (field.meta != null && field.meta.length > 0 ? field.meta.map(printMetadata).join(" ") + " " : "")
-//                      + (switch(field.kind) {
-//                          case FVar(_, _): field.name;
-//                          case FProp(_, _, _, _): throw "FProp is invalid for TDEnum.";
-//                          case FFun(func): field.name + printFunction(func);
-//                      }) + ";"
-//                  ].join("\n")
-//                  + "\n}";
-//              case TDStructure:
-//                  "typedef " + t.name + (t.params.length > 0 ? "<" + t.params.map(printTypeParamDecl).join(", ") + ">" : "") + " = {\n"
-//                  + [for (f in t.fields) {
-//                      tabs + printField(f) + ";";
-//                  }].join("\n")
-//                  + "\n}";
-//              case TDClass(superClass, interfaces, isInterface):
-//                  (isInterface ? "interface " : "class ") + t.name + (t.params.length > 0 ? "<" + t.params.map(printTypeParamDecl).join(", ") + ">" : "")
-//                  + (superClass != null ? " extends " + printTypePath(superClass) : "")
-//                  + (interfaces != null ? (isInterface ? [for (tp in interfaces) " extends " + printTypePath(tp)] : [for (tp in interfaces) " implements " + printTypePath(tp)]).join("") : "")
-//                  + " {\n"
-//                  + [for (f in t.fields) {
-//                      var fstr = printField(f);
-//                      tabs + fstr + switch(f.kind) {
-//                          case FVar(_, _), FProp(_, _, _, _): ";";
-//                          case FFun(func) if (func.expr == null): ";";
-//                          case _: "";
-//                      };
-//                  }].join("\n")
-//                  + "\n}";
-//              case TDAlias(ct):
-//                  "typedef " + t.name + (t.params.length > 0 ? "<" + t.params.map(printTypeParamDecl).join(", ") + ">" : "") + " = "
-//                  + printComplexType(ct)
-//                  + ";";
-//              case TDAbstract(tthis, from, to):
-//                  "abstract " + t.name
-//                  + (tthis == null ? "" : "(" + printComplexType(tthis) + ")")
-//                  + (t.params.length > 0 ? "<" + t.params.map(printTypeParamDecl).join(", ") + ">" : "")
-//                  + (from == null ? "" : [for (f in from) " from " + printComplexType(f)].join(""))
-//                  + (to == null ? "" : [for (t in to) " to " + printComplexType(t)].join(""))
-//                  + " {\n"
-//                  + [for (f in t.fields) {
-//                      var fstr = printField(f);
-//                      tabs + fstr + switch(f.kind) {
-//                          case FVar(_, _), FProp(_, _, _, _): ";";
-//                          case FFun(func) if (func.expr == null): ";";
-//                          case _: "";
-//                      };
-//                  }].join("\n")
-//                  + "\n}";
-//          }
-//
-//      tabs = old;
-//      return str;
-//  }
+		case _: "\n\t-------"+e;
+	};
+	}
 
-    function opt<T>(v:T, f:T->String, prefix = "") return v == null ? "" : (prefix + f(v));
+	function printShortFunction(value:String)
+	{
+		var hasReturn = value.indexOf("return ") == 0;
+		return value + (hasReturn ? ";" : "");
+	}
+
+	function printSwitch(e1, cl, edef)
+	{
+		var old = tabs;
+		tabs += tabString;
+		var s = 'switch ${printExpr(e1)} {\n$tabs' +
+					cl.map(printSwitchCase).join('\n$tabs');
+		if (edef != null)
+			s += '\n${tabs}default: ' + (edef.expr == null ? "" : printExpr(edef) + ";");
+
+		tabs = old;
+		s += '\n$tabs}';
+
+		return s;
+	}
+
+	function printSwitchCase(c)
+	{
+		return 'case ${printExprs(c.values, ", ")}'
+			   + (c.guard != null ? ' if(${printExpr(c.guard)}): ' : ":")
+			   + (c.expr != null ? (opt(c.expr, printExpr)) + "; break;" : "");
+	}
+
+	public function printExprs(el:Array<TypedExpr>, sep:String) {
+		return el.map(printExpr).join(sep);
+	}
+
+	function opt<T>(v:T, f:T->String, prefix = "") return v == null ? "" : (prefix + f(v));
 }
