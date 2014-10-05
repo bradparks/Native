@@ -3,6 +3,9 @@ llvmaxe-haxe-llvm
 
 Haxe LLVM code gen backend (not for Neko JIT)
 
+<a href="http://peyty.github.io#donate"><img src="http://peyty.github.io/images/donate.png"></a>
+<a href="http://peyty.github.io#hireme"><img src="http://peyty.github.io/images/hireme.png"></a>
+
 Progress
 =================
 * "Hello world" in haXe works
