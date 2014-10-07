@@ -1,7 +1,7 @@
 using Math;
 
 class Main {
-	public static var N=8;
+	public static var N:Int=8; // TODO: remove :Int to TCast
 	public static var M=8;
 	public static var BANG=3;
 	
@@ -13,23 +13,23 @@ class Main {
 	public static var pole = new Array< Array< Int > >();
 
 	static function swap(x1,y1,x2,y2) {
-		var k=pole[x1][y1];
+		/*var k=pole[x1][y1];
 		pole[x1][y1]=pole[x2][y2];
-		pole[x2][y2]=k;
+		pole[x2][y2]=k;*/
 	}
 
 	static function poisk(temp, i, j, x, y) {
-		if (temp==pole[i][j] && i+x>=0 && i+x<N && j+y>=0 && j+y<M) {
+		/*if (temp==pole[i][j] && i+x>=0 && i+x<N && j+y>=0 && j+y<M) {
 			return 1+poisk(temp,i+x,j+y,x,y);
 		}
 		if (temp==pole[i][j]) {
 			return 1;
-		}
+		}*/
 		return 0;
 	}
 
 	static function findLine() {
-		var flag=false;
+		/*var flag=false;
 		for (i in 0...N) {
 			for (j in 0...M) {
 				if (poisk(pole[i][j],i,j,0,1)>=BANG || poisk(pole[i][j],i,j,1,0)>=BANG) {
@@ -37,12 +37,12 @@ class Main {
 				}
 			}
 		}
-		return flag;
+		return flag;*/
 	}
 
 
 	static function generate() {
-		for (i in 0...N) {
+		/*for (i in 0...N) {
 			for (j in 0...M) {
 				do {
 					pole[i][j]=Math.ceil(Math.random()*7);
@@ -75,25 +75,25 @@ class Main {
 				if (fl==1) return;
 			}
 		}
-		generate();
+		generate();*/
 	}
 
 
 	public static function main() {
 		for (i in 0...N) {
-			if(pole[i] == null) pole[i] = [];
+			//if(pole[i] == null) pole[i] = [];
 		}
-		generate();
+		generate();/*
 		for (i in 0...N) {
 			var str="";
 			for (j in 0...M) {
 				str=str+pole[i][j]+' ';
 			}
 			trace('${str}');
-		}
+		}*/
 		I = 7;
 		F = 16.6;
-		S = "S";
+		//S = "S";
 		B = true;
 	}
 }

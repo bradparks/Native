@@ -176,6 +176,7 @@ class IRGenerator
                     case "Int": inited = " 0"; "%Int";
                     case "Float": inited = " 0.0"; "%Float";
                     case "Bool": inited = " 255"; "%Bool";
+                    case "Void": inited = " void"; "void";
                     default: "TAbstract(t,[])>>" + t.toString();
                 }
             case TInst(t,[]):
@@ -236,7 +237,11 @@ class IRGenerator
 //                    print('$field ');
 //                else
                     //print('$stat $field ');
-                print('define void @${p}.$field');
+                switch(e.t) {
+                    case TFun([],t): print('define ${getStaticTypeDef(t).t} @${p}.$field');
+                    default: print('define void @${p}.$field');
+                }
+                
                 IRPrinter.printFunctionHead = false;
                 genExpr(e);
                 newline();

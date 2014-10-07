@@ -35,4 +35,8 @@ abstract PPBool8(Int) from Int to Int {}
 abstract PVoid(Int) from Int to Int {}
 abstract PPVoid(Int) from Int to Int {}
 
-class LLVM {}
+class LLVM {
+	// malloc
+	// realloc
+	// free
+}

@@ -202,6 +202,7 @@ class IRPrinter {
                     case "Int": inited = " 0"; "%Int";
                     case "Float": inited = " 0.0"; "%Float";
                     case "Bool": inited = " 255"; "%Bool";
+                    case "Void": inited = " void"; "void";
                     default: "TAbstract(t,[])>>" + t.toString();
                 }
             case TInst(t,[]):
@@ -220,7 +221,7 @@ class IRPrinter {
                     default: "TInst(t,a)>>" + t.toString();
                 }
 
-            case _: "Type>" + e;
+            case _: "<Type>" + e;
         }
         return { t: typed, i: inited };
     }
@@ -239,12 +240,12 @@ class IRPrinter {
 	}
 
 	public static var printFunctionHead = true;
-	public function printFunction(func:TFunc)
+	public function printFunction(func:TFunc, ret:haxe.macro.Type)
 	{
 		var head = printFunctionHead;
 		printFunctionHead = true;
 
-		var body:String = (head?"function ":"") + "( " + printArgs(func.args) + " ) {";
+		var body:String = (head?"function ":"") + "( " + printArgs(func.args) + " ) #0 {";
 
 		if(insideConstructor != null)
 		{
@@ -253,7 +254,14 @@ class IRPrinter {
 			'\n\t\tsetmetatable(self, $insideConstructor)';
 		}
 
-		var defret = "ret void";
+		var defret = 'ret void';
+
+		switch (ret) {
+			case TFun(_, ret):
+			var arg = getArgTypeDef(ret);
+			if(arg.i != " void") defret = 'ret ${arg.t}${arg.i}';
+            default:
+		}
 		
 		switch (func.expr.expr) {
 			case TBlock(el) if (el.length == 0):    body += '\n\t$defret\n}';
@@ -432,7 +440,69 @@ class IRPrinter {
 	}
 
 	public function printExpr(e:TypedExpr){
+
 		return e == null ? "#NULL" : switch(e.expr) {
+
+			// class field
+			case TFunction(func): printFunction(func, e.t);
+
+			// short function
+			case TBlock(el) if (el.length == 1): printShortFunction(printExprs(el, ';\n$tabs'));
+			// long function
+			case TBlock(el):
+				var old = tabs;
+				tabs += tabString;
+				var s =  '\n$tabs' + printExprs(el, ';\n$tabs');
+				tabs = old;
+				s + '\n${tabs}';
+
+			// Class.static = const -> store i32 1, i32* @N
+			case TBinop(OpAssign, e1, e2):
+				switch (e1.expr) {
+				 	case TField(e, FStatic(_)): 
+				 		switch (e2.expr) {
+				 			case TConst(TInt(val)): 'store i32 $val, i32* @${printExpr(e1)}';
+				 			case TConst(TBool(val)): 'store i8 ${val?255:0}, i8* @${printExpr(e1)}';
+				 			case TConst(TFloat(val)): 'store double ${val}, double* @${printExpr(e1)}';
+				 			default: trace("WARNING: Unmatched code pattern of [" + e.expr.getName() + "] is ignored at " + e.pos); "; >> "+(e.expr);
+				 		}
+				 	default: trace("WARNING: Unmatched code pattern of [" + e.expr.getName() + "] is ignored at " + e.pos); "; >> "+(e.expr);
+				}
+
+			// class field
+			case TField(e, fa = FStatic(c,cf)): printField(e, fa);
+
+			case TTypeExpr(t): printModuleType(t);
+
+			case TCall(e1 = { expr : TField(_,FStatic (_))}, el) if(el.length == 0):
+			var typ = getArgTypeDef(e.t).t;
+			'call $typ @${printExpr(e1)}()';
+
+			case TReturn(ret = { expr : TConst(_) }):
+			var arg = getArgTypeDef(ret.t);
+			'ret ${arg.t} ${printExpr(ret)}';
+
+			case TConst(TNull): "null";
+			case TConst(TInt(val)): ""+val;
+			case TConst(TBool(val)): ""+(val?255:0);
+			case TConst(TFloat(val)): ""+val;
+
+			case TVar(v, expr = { expr : TConst(TInt(value)) }):
+			var a = getArgTypeDef(v.t);
+			'%${v.name} = alloca ${a.t}\n$tabs'+
+			'store ${a.t} $value, ${a.t}* %${v.name}';
+
+			case TVar(v, expr = { expr : TField(e1,FStatic (_, cf)) }):
+			var a = getArgTypeDef(v.t);
+			var i = '@${printExpr(e1)}.${cf.get().name}';
+			'%${v.name} = alloca ${a.t}\n$tabs'+
+			'%${v.name}.initial = load ${a.t}* $i\n$tabs'+
+			'store ${a.t} %${v.name}.initial, ${a.t}* %${v.name}';
+
+			default: trace("WARNING: Unmatched code pattern of [" + e.expr.getName() + "] is ignored at " + e.pos); "; >> "+(e.expr);
+		}
+
+		/*return e == null ? "#NULL" : switch(e.expr) {
 		
 		case TConst(c): printConstant(c); // ok
 
@@ -440,7 +510,14 @@ class IRPrinter {
 
 		case TArray(e1, e2): '${printExpr(e1)}[${printExpr(e2)}]'; // ok
 
-		case TField(e1, fa): printField(e1, fa);
+		case TField(e1, fa):
+		trace(e1); trace(fa); 
+			switch (fa) {
+				case FStatic(clas,fiel): "";
+				default: printField(e1, fa);
+			}
+
+		
 
 		case TParenthesis(e1): '(${printExpr(e1)})';
 
@@ -462,7 +539,7 @@ class IRPrinter {
 					' = $add${printExpr(fld.expr)}'; // TODO
 				}
 			 ).join(", ")
-			 + " },Object)";/**/
+			 + " },Object)";/*     * /
 
 		case TArrayDecl(el): {
 			var temp = printExprs(el, ", ");
@@ -514,11 +591,13 @@ class IRPrinter {
 		case TBlock(el):
 			var old = tabs;
 			tabs += tabString;
-			var s = /*'{'*/ '\n$tabs' + printExprs(el, ';\n$tabs');//';\n$tabs');
+			var s =  '\n$tabs' + printExprs(el, ';\n$tabs');//';\n$tabs');
 			tabs = old;
-			s + '\n${tabs}${insideConstructor!=null?"\treturn self\n\t":""}'/*'}'*/;
+			s + '\n${tabs}${insideConstructor!=null?"\treturn self\n\t":""}';
 
-		case TIf(econd, eif, eelse): printIfElse(econd, eif, eelse); 
+		case TIf(econd, eif, eelse): 
+		"br i1 %Condition, label %cond_true, label %cond_false ;" +
+		printIfElse(econd, eif, eelse); 
 		
 		case TWhile(econd, e1, true): 'while(${printExpr(econd)})do ${printExpr(e1)}end';
 		case TWhile(econd, e1, false): 'do ${printExpr(e1)} while(${printExpr(econd)})';
@@ -535,7 +614,7 @@ class IRPrinter {
 		case TMeta(meta, e1): printMetadata(meta) + " " +printExpr(e1);
 
 		case _: "\n\t-------"+e;
-	};
+	};*/
 	}
 
 	function printShortFunction(value:String)

@@ -9,54 +9,56 @@ target triple = "x86_64-apple-macosx10.9.0"
 @.str = private unnamed_addr constant [33 x i8] c"\D0\9F\D1\80\D0\B8\D0\B2\D0\B5\D1\82! Hello world Clang\0A\00", align 1
 
 ; Function Attrs: nounwind ssp uwtable
+define void @test() #0 {
+  %z = alloca i32*, align 8
+  %1 = load i32*** @pole, align 8
+  %2 = getelementptr inbounds i32** %1, i64 0
+  %3 = load i32** %2, align 8
+  store i32* %3, i32** %z, align 8
+  ret void
+}
+
+; Function Attrs: nounwind ssp uwtable
+define void @test1(i32 %x1) #0 {
+  %1 = alloca i32, align 4
+  %z = alloca i32*, align 8
+  store i32 %x1, i32* %1, align 4
+  %2 = load i32* %1, align 4
+  %3 = sext i32 %2 to i64
+  %4 = load i32*** @pole, align 8
+  %5 = getelementptr inbounds i32** %4, i64 %3
+  %6 = load i32** %5, align 8
+  store i32* %6, i32** %z, align 8
+  ret void
+}
+
+; Function Attrs: nounwind ssp uwtable
+define void @test2(i32 %x1) #0 {
+  %1 = alloca i32, align 4
+  %z = alloca i32, align 4
+  store i32 %x1, i32* %1, align 4
+  %2 = load i32* %1, align 4
+  store i32 %2, i32* %z, align 4
+  ret void
+}
+
+; Function Attrs: nounwind ssp uwtable
 define void @swap(i32 %x1, i32 %y1, i32 %x2, i32 %y2) #0 {
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
   %4 = alloca i32, align 4
-  %k = alloca i32, align 4
+  %z = alloca i32*, align 8
   store i32 %x1, i32* %1, align 4
   store i32 %y1, i32* %2, align 4
   store i32 %x2, i32* %3, align 4
   store i32 %y2, i32* %4, align 4
-  %5 = load i32* %2, align 4
+  %5 = load i32* %1, align 4
   %6 = sext i32 %5 to i64
-  %7 = load i32* %1, align 4
-  %8 = sext i32 %7 to i64
-  %9 = load i32*** @pole, align 8
-  %10 = getelementptr inbounds i32** %9, i64 %8
-  %11 = load i32** %10, align 8
-  %12 = getelementptr inbounds i32* %11, i64 %6
-  %13 = load i32* %12, align 4
-  store i32 %13, i32* %k, align 4
-  %14 = load i32* %4, align 4
-  %15 = sext i32 %14 to i64
-  %16 = load i32* %3, align 4
-  %17 = sext i32 %16 to i64
-  %18 = load i32*** @pole, align 8
-  %19 = getelementptr inbounds i32** %18, i64 %17
-  %20 = load i32** %19, align 8
-  %21 = getelementptr inbounds i32* %20, i64 %15
-  %22 = load i32* %21, align 4
-  %23 = load i32* %2, align 4
-  %24 = sext i32 %23 to i64
-  %25 = load i32* %1, align 4
-  %26 = sext i32 %25 to i64
-  %27 = load i32*** @pole, align 8
-  %28 = getelementptr inbounds i32** %27, i64 %26
-  %29 = load i32** %28, align 8
-  %30 = getelementptr inbounds i32* %29, i64 %24
-  store i32 %22, i32* %30, align 4
-  %31 = load i32* %k, align 4
-  %32 = load i32* %4, align 4
-  %33 = sext i32 %32 to i64
-  %34 = load i32* %3, align 4
-  %35 = sext i32 %34 to i64
-  %36 = load i32*** @pole, align 8
-  %37 = getelementptr inbounds i32** %36, i64 %35
-  %38 = load i32** %37, align 8
-  %39 = getelementptr inbounds i32* %38, i64 %33
-  store i32 %31, i32* %39, align 4
+  %7 = load i32*** @pole, align 8
+  %8 = getelementptr inbounds i32** %7, i64 %6
+  %9 = load i32** %8, align 8
+  store i32* %9, i32** %z, align 8
   ret void
 }
 
@@ -527,6 +529,7 @@ define i32 @main(i32 %argc, i8** %argv) #0 {
   %2 = alloca i32, align 4
   %3 = alloca i8**, align 8
   %i = alloca i32, align 4
+  %xxx = alloca i32, align 4
   store i32 0, i32* %1
   store i32 %argc, i32* %2, align 4
   store i8** %argv, i8*** %3, align 8
@@ -569,9 +572,12 @@ define i32 @main(i32 %argc, i8** %argv) #0 {
   call void @generate()
   store i32 11, i32* @N, align 4
   store i32 8, i32* @M, align 4
-  %28 = call i32 (i8*, ...)* @printf(i8* getelementptr inbounds ([33 x i8]* @.str, i32 0, i32 0))
-  %29 = load i32* %1
-  ret i32 %29
+  store i32 0, i32* %xxx, align 4
+  %28 = load i32* @N, align 4
+  store i32 %28, i32* %xxx, align 4
+  %29 = call i32 (i8*, ...)* @printf(i8* getelementptr inbounds ([33 x i8]* @.str, i32 0, i32 0))
+  %30 = load i32* %1
+  ret i32 %30
 }
 
 declare i8* @malloc(i64) #1

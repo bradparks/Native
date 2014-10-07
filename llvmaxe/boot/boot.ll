@@ -5,7 +5,11 @@ declare i32 @puts (i8*)
 ; basic types
 %Int = type i32
 %Float = type double
-%String = type { [0 x i8]*, i32, i32 }; Pointer, Length, ARC
+%String = type { i32, [0 x i8]*, i32, i32 }; ARC, Pointer, Length, Hash
 %PString = type %String*
 %Bool = type i8; Write: true = 255, false = 0. Read: TODO
+@vtrue = constant i8 255
+@vfalse = constant i8 0
+@true = constant i8* @vtrue
+@false = constant i8* @vfalse
 ; boot end

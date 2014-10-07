@@ -14,10 +14,23 @@ int M=8;
 int BANG=3;
 int** pole;//[8][8];
 
+void test() {
+	int* z = pole[0];
+}
+
+void test1(x1) {
+	int* z = pole[x1];
+}
+
+void test2(x1) {
+	int z = x1;
+}
+
 void swap(x1,y1,x2,y2) {
-	int k=pole[x1][y1];
-	pole[x1][y1]=pole[x2][y2];
-	pole[x2][y2]=k;
+	int* z = pole[x1];
+	//int k=pole[x1][y1];
+	//pole[x1][y1]=pole[x2][y2];
+	//pole[x2][y2]=k;
 }
 
 int poisk(temp, i, j, x, y) {
@@ -102,6 +115,9 @@ int /*__attribute__((optnone))*/ main(int argc, char const *argv[]) {
 
 	N = 11;
 	M = 8;
+
+	int xxx = 0;
+	xxx = N;
 
 	printf("Привет! Hello world Clang\n");
 }

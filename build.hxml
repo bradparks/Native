@@ -7,8 +7,8 @@
 -js bin-llvm/Main.ll
 -D llvm
 --macro llvmaxe.IRGenerator.use()
-#-dce full
--dce std
+-dce full
+#-dce std
 #--connect 6000
 
 # clang
