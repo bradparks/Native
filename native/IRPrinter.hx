@@ -20,7 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-package llvmaxe;
+package native;
 
 import haxe.ds.StringMap;
 

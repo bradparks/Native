@@ -21,7 +21,7 @@
  *
  *
  */
-package llvmaxe;
+package native;
 
 import haxe.macro.Type;
 import haxe.macro.JSGenApi;
@@ -477,8 +477,12 @@ class IRGenerator
             importsBuf.add("import '" + mpt + "';\n");
 
         var boot = "";
-        var path = ".";
-        boot = "" + sys.io.File.getContent('$path/llvmaxe/boot/boot.ll');
+
+        var pos = Context.getPosInfos((macro null).pos);
+        var dir = haxe.io.Path.directory(pos.file);
+        var path = haxe.io.Path.addTrailingSlash(dir);
+
+        boot = "" + sys.io.File.getContent('$path/boot/boot.ll');
 
         var combined = importsBuf.toString() + topLevelBuf.toString() +  buf.toString();
 
@@ -486,7 +490,7 @@ class IRGenerator
         // TODO utf8/16
         var strs = "; master strings";
         var strid = -1;
-        for(s in llvmaxe.IRPrinter.strings)
+        for(s in IRPrinter.strings)
         {   
             strid++;
             strs += '\n@global_str_$strid = constant [${s.length+1} x i8] c"$s\\00"';

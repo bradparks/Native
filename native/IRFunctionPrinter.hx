@@ -1,4 +1,4 @@
-package llvmaxe;
+package native;
 
 class IRFunctionPrinter {
 
